@@ -1,25 +1,26 @@
+import json
+
 from google import genai
-from google.genai import types
 
 import config
+from tools import system_tools
 
 
 class EliotAgent:
     """
     Cerebro principal de Eliot.
 
-    Se encarga de:
-    - Conectarse con Gemini.
-    - Mantener una conversación.
-    - Aplicar la personalidad de Eliot.
-    - Preparar el sistema para añadir herramientas posteriormente.
+    Gemini interpreta las instrucciones y puede utilizar
+    las herramientas disponibles en system_tools.py.
     """
 
     def __init__(self):
-        if not config.GEMINI_API_KEY:
+        if (
+            not config.GEMINI_API_KEY
+            or config.GEMINI_API_KEY == "TU_API_KEY_AQUI"
+        ):
             raise ValueError(
-                "No se encontró GEMINI_API_KEY. "
-                "Configura tu clave de Gemini antes de iniciar Eliot."
+                "No se encontró una API key válida de Gemini."
             )
 
         self.client = genai.Client(
@@ -36,75 +37,177 @@ Tu personalidad:
 - Hablas en español.
 - Respondes de forma natural y clara.
 - No das respuestas innecesariamente largas.
-- Puedes llamar al usuario "señor" de vez en cuando, sin exagerar.
-- Tu objetivo es ayudar al usuario y ejecutar sus instrucciones
-  mediante las herramientas disponibles.
+- Puedes llamar al usuario "señor" de vez en cuando.
+- Tu objetivo es ayudar al usuario y utilizar las herramientas
+  disponibles cuando sea necesario.
 
 IMPORTANTE:
-En esta primera versión todavía estás aprendiendo a utilizar
-las herramientas del sistema. No inventes que realizaste una
-acción si realmente no tienes una herramienta para realizarla.
-
-Cuando una petición no requiera una herramienta, responde
-normalmente.
+- No inventes que realizaste una acción.
+- Si una herramienta puede realizar la acción solicitada,
+  utiliza la herramienta.
+- Si una petición no necesita una herramienta, responde normalmente.
 """
 
-        self.historial = []
+        self.herramientas = [
+            {
+                "type": "function",
+                "name": "obtener_informacion_sistema",
+                "description": (
+                    "Obtiene información básica del ordenador "
+                    "de Windows donde se ejecuta Eliot."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "type": "function",
+                "name": "abrir_aplicacion",
+                "description": (
+                    "Abre una aplicación de Windows conocida, "
+                    "por ejemplo calculadora, bloc de notas "
+                    "o explorador de archivos."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "nombre": {
+                            "type": "string",
+                            "description": (
+                                "Nombre de la aplicación que se desea abrir."
+                            ),
+                        }
+                    },
+                    "required": ["nombre"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "abrir_sitio_web",
+                "description": (
+                    "Abre una dirección web en el navegador "
+                    "predeterminado del ordenador."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": (
+                                "Dirección web que se desea abrir."
+                            ),
+                        }
+                    },
+                    "required": ["url"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "obtener_directorio_actual",
+                "description": (
+                    "Obtiene la carpeta desde la que se está "
+                    "ejecutando Eliot."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        ]
+
+        self.funciones = {
+            "obtener_informacion_sistema":
+                system_tools.obtener_informacion_sistema,
+
+            "abrir_aplicacion":
+                system_tools.abrir_aplicacion,
+
+            "abrir_sitio_web":
+                system_tools.abrir_sitio_web,
+
+            "obtener_directorio_actual":
+                system_tools.obtener_directorio_actual,
+        }
+
+        self.ultima_interaccion = None
 
     def preguntar(self, mensaje):
         """
-        Envía un mensaje a Gemini y devuelve la respuesta de Eliot.
+        Envía una instrucción a Gemini y permite que Eliot
+        utilice sus herramientas cuando sea necesario.
         """
 
         if not mensaje or not mensaje.strip():
             return "No he recibido ninguna instrucción."
 
-        self.historial.append(
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_text(text=mensaje)
-                ]
-            )
-        )
-
         try:
-            respuesta = self.client.models.generate_content(
+            interaccion = self.client.interactions.create(
                 model=self.modelo,
-                contents=self.historial,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_instruction,
-                    temperature=0.7,
-                    max_output_tokens=500,
-                ),
+                input=mensaje,
+                tools=self.herramientas,
             )
 
-            texto = respuesta.text
+            while True:
+                llamada = None
 
-            if not texto:
-                return "No pude generar una respuesta."
+                for paso in interaccion.steps:
+                    if paso.type == "function_call":
+                        llamada = paso
+                        break
 
-            self.historial.append(
-                types.Content(
-                    role="model",
-                    parts=[
-                        types.Part.from_text(text=texto)
-                    ]
+                if llamada is None:
+                    break
+
+                nombre = llamada.name
+                argumentos = llamada.arguments or {}
+
+                funcion = self.funciones.get(nombre)
+
+                if funcion is None:
+                    resultado = {
+                        "error": f"Herramienta desconocida: {nombre}"
+                    }
+                else:
+                    try:
+                        resultado = funcion(**argumentos)
+                    except Exception as error:
+                        resultado = {
+                            "error": str(error)
+                        }
+
+                if not isinstance(resultado, (dict, list, str, int, float, bool)):
+                    resultado = str(resultado)
+
+                interaccion = self.client.interactions.create(
+                    model=self.modelo,
+                    previous_interaction_id=interaccion.id,
+                    input=[
+                        {
+                            "type": "function_result",
+                            "name": nombre,
+                            "call_id": llamada.id,
+                            "result": [
+                                {
+                                    "type": "text",
+                                    "text": json.dumps(
+                                        resultado,
+                                        ensure_ascii=False
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
                 )
-            )
 
-            return texto
+            self.ultima_interaccion = interaccion
+
+            return interaccion.output_text
 
         except Exception as error:
-            print(f"[ERROR GEMINI] {error}")
+            print(f"[ERROR ELIOT] {error}")
+
             return (
                 "Lo siento, señor. "
-                "Tuve un problema al comunicarme con Gemini."
+                "Tuve un problema al procesar la instrucción."
             )
-
-    def limpiar_historial(self):
-        """
-        Borra la conversación actual.
-        """
-
-        self.historial = []

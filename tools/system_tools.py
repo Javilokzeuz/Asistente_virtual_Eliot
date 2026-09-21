@@ -4,11 +4,6 @@ import subprocess
 
 from pycaw.pycaw import AudioUtilities
 
-
-# ============================================================
-# INFORMACIÓN DEL SISTEMA
-# ============================================================
-
 def obtener_informacion_sistema():
     """Devuelve información básica del PC."""
     return {
@@ -22,11 +17,6 @@ def obtener_informacion_sistema():
 def obtener_directorio_actual():
     """Devuelve la carpeta desde la que se está ejecutando Eliot."""
     return os.getcwd()
-
-
-# ============================================================
-# APLICACIONES
-# ============================================================
 
 def abrir_aplicacion(nombre):
     """Abre una aplicación de Windows conocida."""
@@ -51,11 +41,6 @@ def abrir_aplicacion(nombre):
     except Exception as error:
         return f"No pude abrir {nombre}: {error}"
 
-
-# ============================================================
-# INTERNET
-# ============================================================
-
 def abrir_sitio_web(url):
     """Abre una página web en el navegador predeterminado."""
 
@@ -65,11 +50,6 @@ def abrir_sitio_web(url):
 
     except Exception as error:
         return f"No pude abrir la página: {error}"
-
-
-# ============================================================
-# VOLUMEN
-# ============================================================
 
 def obtener_volumen():
     """Obtiene el volumen actual del sistema."""

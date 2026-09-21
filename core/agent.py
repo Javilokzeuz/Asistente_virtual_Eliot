@@ -114,6 +114,53 @@ IMPORTANTE:
                     "properties": {},
                 },
             },
+            {
+                "type": "function",
+                "name": "obtener_volumen",
+                "description": (
+                    "Obtiene el volumen actual del sistema "
+                    "en porcentaje."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "type": "function",
+                "name": "establecer_volumen",
+                "description": (
+                    "Establece el volumen del sistema "
+                    "en un porcentaje entre 0 y 100."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "nivel": {
+                            "type": "number",
+                            "description": "Nivel de volumen entre 0 y 100."
+                        }
+                    },
+                    "required": ["nivel"],
+                },
+            },
+            {
+                "type": "function",
+                "name": "cambiar_volumen",
+                "description": (
+                    "Aumenta o disminuye el volumen actual del sistema en un porcentaje entre -100 y 100."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "nivel": {
+                            "type": "number",
+                            "description": "Nivel de volumen entre -100 y 100."
+                        }
+                    },
+                    "required": ["cambiar_nivel"],
+                },
+            }
         ]
 
         self.funciones = {
@@ -126,8 +173,17 @@ IMPORTANTE:
             "abrir_sitio_web":
                 system_tools.abrir_sitio_web,
 
+            "obtener_volumen":
+                system_tools.obtener_volumen,
+
             "obtener_directorio_actual":
                 system_tools.obtener_directorio_actual,
+
+            "establecer_volumen":
+                system_tools.establecer_volumen,
+
+            "cambiar_volumen":
+                system_tools.cambiar_volumen
         }
 
         self.ultima_interaccion = None
